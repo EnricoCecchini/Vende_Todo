@@ -98,7 +98,33 @@ def search():
 
     return render_template('search.html', products=products, amount=len(products))
 
+@app.route('/product', methods=['POST', 'GET'])
+def product_page():
+    product = []
+    images = []
+    if request.method == 'POST':
+        # Note: Get prod_id from session redirect here
+        prod_id = request.form.get('prod_id')
+        # prod_id = session['prod_id']
+        images = select_from_db(f"""SELECT prodim.img_id, image.image
+                                    FROM image INNER JOIN
+                                        (SELECT img_id
+                                        FROM prod_image INNER JOIN 
+                                            (SELECT * FROM product WHERE {prod_id} = 1) AS p
+                                        ON p.prod_id = prod_image.prod_id) AS prodim
+                                    ON image.img_id = prodim.img_id 
+                                """)
+        product = select_from_db(f"""SELECT * FROM product where prod_id = {prod_id} """)
+        
+        if images:
+            images = images[0]
+        if product:
+            product = product[0]
+        print(images)
+        print(product)
+        return render_template('product.html', product=product, images=images)
 
+    return render_template('product.html', product=product, images=images)
 
 # Run app
 if __name__ == "__main__":
