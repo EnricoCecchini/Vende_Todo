@@ -85,18 +85,45 @@ def register():
 @app.route('/search', methods=['POST', 'GET'])
 def search():
     products = []
+    tag_list = select_from_db("""SELECT * FROM tag""")
+    print(tag_list)
     if request.method == 'POST':
         searchParams = request.form.get('params')
+        prod_tagid = request.form.get('tag_id')
+        print(prod_tagid)
         if searchParams:
             # Select products with search params in product title or description 
-            products = select_from_db(f""" SELECT * FROM  product WHERE prod_name LIKE '%{searchParams}%' OR description LIKE '%{searchParams}%' """)
+            if prod_tagid == '0':
+                products = select_from_db(f"""  SELECT * 
+                                                FROM product
+                                                    WHERE prod_name LIKE '%{searchParams}%' 
+                                                    OR description LIKE '%{searchParams}%' 
+                                            """)
+            else:
+                products = select_from_db(f"""  SELECT prod_tag.prod_id, prod_name, description, price, prod_condition, stock, date
+                                                FROM prod_tag INNER JOIN
+                                                    (SELECT * 
+                                                        FROM product
+                                                        WHERE prod_name LIKE '%{searchParams}%' 
+                                                            OR description LIKE '%{searchParams}%') AS p
+                                                ON prod_tag.prod_id = p.prod_id
+                                                WHERE tag_id = {prod_tagid} """)
+            if products:
+                products = products[0]
+
+        elif prod_tagid:
+            products = select_from_db(f"""  SELECT prod_tag.prod_id, prod_name, description, price, prod_condition, stock, date
+                                                FROM prod_tag INNER JOIN
+                                                    (SELECT * FROM product) AS p
+                                                ON prod_tag.prod_id = p.prod_id
+                                                WHERE tag_id = {prod_tagid} """)
             if products:
                 products = products[0]
         print(products)
 
-        return render_template('search.html', products=products, amount=len(products))
+        return render_template('search.html', products=products, amount=len(products), tags=tag_list)
 
-    return render_template('search.html', products=products, amount=len(products))
+    return render_template('search.html', products=products, amount=len(products), tags=tag_list)
 
 @app.route('/product', methods=['POST', 'GET'])
 def product_page():
