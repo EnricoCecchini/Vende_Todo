@@ -1,6 +1,6 @@
 import MySQLdb
 from flask_mysqldb import MySQL
-from flask import Flask, render_template, url_for, request, session
+from flask import Flask, render_template, url_for, request, session, redirect
 from flask_cors import CORS
 
 # Create flask app
@@ -35,18 +35,44 @@ def insert_into_db(query):
     except MySQLdb.ProgrammingError:
         pass
 
-
-# Register page
+# Index page
 @app.route('/', methods=['POST', 'GET'])
 def index():
     try:
-        if session['user_id']:
-            session['user_id'] = ''
-        else:
+        if not session['user_id']:
             session['user_id'] = ''
     except KeyError:
         session['user_id'] = ''
-    return "Hello"
+    return render_template('index.html')
+
+# Login Page
+@app.route('/login', methods=['POST', 'GET'])
+def login():
+    error = ''
+    print(session['user_id'])
+    if request.method == 'POST':
+        if 'login' in request.form:
+            email = request.form.get('email')
+            passw = request.form.get('passw')
+            print(email, passw)
+
+            # Check if login data is correct
+            users = select_from_db(f""" SELECT user_id FROM user WHERE email = '{email}' AND password = '{passw}' """)
+            if users:
+                user_id = users[0][0]
+                session['user_id'] = user_id
+
+                return redirect(url_for('profile'))
+            
+            else:
+                error = 'El usuario o contrasena es incorrecto'
+                return render_template('login.html', error=error)
+        
+        elif 'signout' in request.form:
+            session['user_id'] = ''
+            return redirect(url_for('index'))
+
+    return render_template('login.html', error=error)
 
 # Register page
 @app.route('/register', methods=['POST', 'GET'])
@@ -58,12 +84,12 @@ def register():
         email = request.form['email']
         passw = request.form['passw']
         telephone = request.form['telephone']
-        date = request.form['date']
+        date = str(request.form['date'])
         print(email, passw, name, lastname, telephone, date)
 
         # Check if user exists
         users = select_from_db(f""" SELECT user_id FROM user WHERE email = '{email}' """)
-        print(users[0][0])
+        #print(users[0][0])
 
         # If user exists, send error
         if users:
@@ -71,15 +97,78 @@ def register():
             return render_template('register.html', error=error)
         else:
             # Insert user in database
-            insert_into_db(f"""INSERT INTO user(email, password, name, lastname, telephone, type) VALUES('{email}', '{passw}', '{name}', '{lastname}', '{telephone}', 1)""")
+            insert_into_db(f""" INSERT INTO user(email, password, name, lastname, telephone, date_of_birth, type) 
+                                VALUES('{email}', '{passw}', '{name}', '{lastname}', '{telephone}', '{date}', 1)
+                            """)
 
             # Get user_id
             user = select_from_db(f""" SELECT user_id FROM user WHERE email = '{email}' """)
             user_id = user[0][0]
             session['user_id'] = user_id
-            return render_template('index.html')
+            return redirect(url_for('add_address'))
     
     return render_template('register.html', error=error)
+
+# Add address
+@app.route('/add_address', methods=['POST', 'GET'])
+def add_address():
+    error = ''
+    if request.method == 'POST':
+        user_id = session['user_id']
+        street = request.form['street']
+        house_num = request.form['house_num']
+        city = request.form['city']
+        state = request.form['state']
+        country = request.form['country']
+        zip_code = str(request.form['zip_code'])
+        print(street, house_num, city, state, country, zip_code)
+
+        # Check if user exists
+        users = select_from_db(f""" SELECT user_id FROM user WHERE user_id = '{user_id}' """)
+
+        # If user exists, send error
+        if users:
+            # Insert address in database
+            insert_into_db(f""" INSERT INTO address(street, house_number, city, state, country, zip_code) 
+                                VALUES('{street}', '{house_num}', '{city}', '{state}', '{country}', '{zip_code}')
+                            """)
+
+            # Get address_id
+            address = select_from_db(f"""   SELECT address_id FROM address 
+                                                WHERE street = '{street}' 
+                                                AND house_number = '{house_num}'
+                                                AND city = '{city}'
+                                                AND state = '{state}'
+                                                AND country = '{country}'
+                                                AND zip_code = '{zip_code}'
+                                            ORDER BY address_id DESC
+                                    """)
+            
+            if address:
+                address_id = address[0][0]
+
+                # Link user and Address
+                insert_into_db(f""" INSERT INTO lives(user_id, address_id) 
+                                VALUES('{user_id}', '{address_id}')
+                            """)
+
+            return render_template('index.html')
+    
+    return render_template('add_address.html', error=error)
+
+# User Profile page
+@app.route('/profile', methods=['POST', 'GET'])
+def profile():
+    error = ''
+    user_id = session['user_id']
+
+    user = select_from_db(f""" SELECT * FROM user WHERE user_id = '{user_id}' """)
+    if user:
+        print(user)
+    else:
+        print('No login')
+
+    return render_template('profile.html', error=error, user=user)
 
 # Product search page
 @app.route('/search', methods=['POST', 'GET'])
@@ -125,6 +214,7 @@ def search():
 
     return render_template('search.html', products=products, amount=len(products), tags=tag_list)
 
+# Product page
 @app.route('/product', methods=['POST', 'GET'])
 def product_page():
     product = []
